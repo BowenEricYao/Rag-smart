@@ -170,24 +170,30 @@ class KnowledgeBaseUploader:
         rsp = requests.post(f"https://{self.kb_domain}{req.path}", headers=req.headers, data=req.body)
         return rsp.json()
     
-    def upload_local_to_kb(self, local_path, collection_name, doc_id=None, project="default", meta=None):
-        """一键上传：本地文件 -> TOS -> 知识库"""
+    def upload_local_to_kb(self, local_path, collection_name, user_id, doc_id=None, project="default", extra_meta=None):
+        """一键上传：本地文件 -> TOS -> 知识库（按用户标签存储）"""
         filename = os.path.basename(local_path)
         doc_type = os.path.splitext(filename)[1].lstrip('.')
         if doc_type == 'jpg':
             doc_type = 'jpeg'
         
-        # 上传到TOS
-        tos_key = filename
+        # 上传到TOS（按用户分目录）
+        tos_key = f"{user_id}/{filename}"
         self.upload_to_tos(local_path, tos_key)
         
         # 获取预签名URL
         url = self.get_presigned_url(tos_key)
         
+        # 构建用户标签meta
+        meta = [
+            {"field_name": "user_id", "field_type": "string", "field_value": user_id}
+        ]
+        if extra_meta:
+            meta.extend(extra_meta)
+        
         # 添加到知识库
         if doc_id is None:
-            # doc_id只能包含字母、数字、下划线、横杠，且以字母或下划线开头
-            doc_id = "doc_" + hashlib.md5(filename.encode()).hexdigest()[:16]
+            doc_id = f"doc_{user_id}_" + hashlib.md5(filename.encode()).hexdigest()[:12]
         return self.add_doc_by_url(collection_name, doc_id, filename, doc_type, url, project, meta)
 
 
@@ -199,9 +205,10 @@ if __name__ == "__main__":
         tos_bucket=config.TOS_BUCKET
     )
     
-    # 一键上传本地文件到知识库
+    # 按用户上传文档到知识库
     result = uploader.upload_local_to_kb(
         local_path=r"C:\Users\yaobowen.ALIT\Downloads\20251208阶段性工作汇报.pdf",
-        collection_name="lzm_test2"
+        collection_name="lzm_test2",
+        user_id="user_001"  # 用户标识
     )
     print(result)
